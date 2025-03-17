@@ -1,6 +1,7 @@
+use super::invoke;
+use crate::components::navbar::NavBar;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
-use wasm_bindgen::prelude::*;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
 use yew_hooks::{use_async, use_interval};
@@ -18,23 +19,18 @@ mod get_args {
     }
 }
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"])]
-    async fn invoke(cmd: &str, args: JsValue) -> JsValue;
-}
 #[derive(Serialize, Deserialize, PartialEq)]
 struct ProccessInfo {
     id: String,
     name: String,
-    cpu: String,
-    memory: String,
-    disk_read: String,
-    disk_write: String,
+    cpu: f32,
+    memory: u64,
+    disk_read: u64,
+    disk_write: u64,
 }
 
-#[function_component(App)]
-pub fn app() -> Html {
+#[function_component(Processes)]
+pub fn processes() -> Html {
     let processes = use_state_eq(|| Vec::<ProccessInfo>::new());
     let process_id = use_state(|| None::<String>);
     let search_filter = use_state(|| None::<String>);
@@ -82,6 +78,11 @@ pub fn app() -> Html {
         }
     });
 
+    use_effect_with((), {
+        let get_process = get_process.clone();
+        move |_| get_process.run()
+    });
+
     let search_input = use_node_ref();
 
     let on_search = Callback::from({
@@ -106,9 +107,12 @@ pub fn app() -> Html {
     }
     html! {
 
-        <>
-                                         <div class="p-4 bg-white block sm:flex items-center justify-between border-b border-gray-200  dark:bg-gray-800 dark:border-gray-700">
-                                     <div class="w-full mb-1">
+    <>
+        <NavBar />
+
+
+        <div class="absolute sticky top-0 p-4 bg-white block sm:flex items-center justify-between border-b border-gray-200  dark:bg-gray-800 dark:border-gray-700">
+        <div class="w-full mb-1">
                                              <div class="items-center justify-between block sm:flex md:divide-x md:divide-gray-100 dark:divide-gray-700">
                                              <div class="flex items-center mb-4 sm:mb-0">
                                                  <form onsubmit={on_search} class="sm:pr-3" >
@@ -123,7 +127,7 @@ pub fn app() -> Html {
                                                  </div>
                                              </div>
                                             <form onsubmit={on_kill_process}>
-                                             <button type="submit" id="createProductButton" class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800" data-drawer-target="drawer-create-product-default" data-drawer-show="drawer-create-product-default" aria-controls="drawer-create-product-default" data-drawer-placement="right">
+                                             <button disabled={process_id.is_none()} type="submit" id="createProductButton" class={format!("text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800 {}", if process_id.is_some(){""}else{"opacity-30"})} data-drawer-target="drawer-create-product-default" data-drawer-show="drawer-create-product-default" aria-controls="drawer-create-product-default" data-drawer-placement="right">
                                          { "end process" }
                                              </button>
                                             </form>
@@ -133,7 +137,7 @@ pub fn app() -> Html {
                                      <div class="flex flex-col">
                                  <div class="overflow-x-auto">
                                      <div class="inline-block min-w-full align-middle">
-                                         <div class="overflow-y-auto shadow h-[400px]">
+                                         <div class="overflow-y-auto shadow h-screen">
                                              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
                                                  <thead class="bg-gray-100 dark:bg-gray-700 sticky top-0">
                                                      <tr>
@@ -171,10 +175,10 @@ pub fn app() -> Html {
                                         if let Some(proc_id) = (*process_id).clone() { if proc_id == process.id { "bg-gray-100 dark:bg-gray-700" }else{ "" }}else{""})}>
                                                      <td class="cursor-pointer px-2 py-1 text-base font-medium text-gray-800 whitespace-nowrap dark:text-gray-300">{process.name.clone()}</td>
                                                      <td class="cursor-pointer px-2 py-1 text-base font-medium text-gray-800 whitespace-nowrap dark:text-gray-300">{process.id.clone()}</td>
-                                                     <td class="cursor-pointer px-2 py-1 text-base font-medium text-gray-800 whitespace-nowrap dark:text-gray-300">{process.cpu.clone()}</td>
-                                                     <td class="cursor-pointer px-2 py-1 text-base font-medium text-gray-800 whitespace-nowrap dark:text-gray-300">{process.memory.clone()}</td>
-                                                     <td class="cursor-pointer px-2 py-1 text-base font-medium text-gray-800 whitespace-nowrap dark:text-gray-300">{process.disk_read.clone()}</td>
-                                                     <td class="cursor-pointer px-2 py-1 text-base font-medium text-gray-800 whitespace-nowrap dark:text-gray-300">{process.disk_write.clone()}</td>
+                                                     <td class="cursor-pointer px-2 py-1 text-base font-medium text-gray-800 whitespace-nowrap dark:text-gray-300">{process.cpu.clone()}{" %"}</td>
+                                                     <td class="cursor-pointer px-2 py-1 text-base font-medium text-gray-800 whitespace-nowrap dark:text-gray-300">{process.memory.clone()}{" MB"}</td>
+                                                     <td class="cursor-pointer px-2 py-1 text-base font-medium text-gray-800 whitespace-nowrap dark:text-gray-300">{process.disk_read.clone()}{" MB"}</td>
+                                                     <td class="cursor-pointer px-2 py-1 text-base font-medium text-gray-800 whitespace-nowrap dark:text-gray-300">{process.disk_write.clone()}{" MB"}</td>
                                                  </tr>
                                                      })}
                                                  </tbody>
@@ -184,8 +188,6 @@ pub fn app() -> Html {
                                  </div>
                              </div>
                              <div class="sticky bottom-0 right-0 items-center w-full p-4 bg-gray-100 border-t border-gray-200 sm:flex sm:justify-between dark:bg-gray-800 dark:border-gray-700">
-                          <div class="flex items-center mb-4 sm:mb-0">
-                         </div>
                          </div>
     </>
     }
